@@ -4,8 +4,12 @@ import team.projectpulse.section.Section;
 import team.projectpulse.team.Team;
 import team.projectpulse.user.PeerEvaluationUser;
 import jakarta.persistence.*;
+import org.hibernate.annotations.DynamicUpdate;
 
+// An UPDATE writes only the changed columns, so an edit that loaded the student before a deactivation committed cannot
+// write enabled back to true.
 @Entity
+@DynamicUpdate
 public class Student extends PeerEvaluationUser {
 
     @ManyToOne(optional = false)

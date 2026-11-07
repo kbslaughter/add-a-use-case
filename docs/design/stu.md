@@ -158,7 +158,7 @@ Reuses JWT authentication and the `Result` envelope with `ExceptionHandlerAdvice
 | Use case, flow | Level (unit / integration) | Asserts |
 |---|---|---|
 | Main, instructor assigned to the course section | Integration | `200`; `enabled` is false; her team and evaluations are unchanged |
-| Main, course admin not assigned to the course section | Integration | `200` |
+| Main, course admin not assigned to the course section | Integration | `200`, at the API only ([OI-65](../requirements/OPEN-ISSUES.md)) |
 | Main, service | Unit | Sets `enabled` to false and saves |
 | 3a, direct request | Integration | `400`; still deactivated |
 | 3a, action not offered | Cypress | No Deactivate button for a deactivated student |
@@ -170,7 +170,7 @@ Reuses JWT authentication and the `Result` envelope with `ExceptionHandlerAdvice
 | Open session, deactivated student's existing token | Integration | `401` on a read and on a submission |
 | Open session, deleted account's token | Integration | `401` |
 | Login with the correct password | Integration | `401` |
-| `PUT` with `enabled` false, as instructor | Unit + integration | `enabled` unchanged; rewrites `StudentServiceTest.testInstructorUpdatesStudent`, which asserts the old behavior |
+| `PUT` with `enabled` false, as instructor | Unit + integration | `enabled` unchanged; `StudentServiceTest.testUpdateIgnoresEnabled` replaces `testInstructorUpdatesStudent`, which asserted the old behavior |
 | New evaluation of a deactivated teammate | Unit | `400`; nothing saved |
 | Edit an existing evaluation of her, window open | Unit | Succeeds |
 | Form, evaluator with no evaluations this week | Cypress | Deactivated teammate not listed |
@@ -185,4 +185,6 @@ Reuses JWT authentication and the `Result` envelope with `ExceptionHandlerAdvice
 ## Open questions / risks
 
 - **Accepted regression:** a mistaken deactivation can't be undone from the UI until UC-STU-reactivate-student ships.
-- **Login message:** `request.ts` shows no toast on a `401`, and the server's text is "User account is abnormal." `/implement` should check what a deactivated student actually sees on the login page.
+- **Login message:** a deactivated student sees no message on the login page. `request.ts` shows no toast on a `401` and `Login.vue` only logs the error, so it looks the same as a wrong password. The use case doesn't require a message; left as a follow-up.
+- **Course admin not assigned to the course section:** the route admits her, but the UI can't reach it, because the student read and the default course section rule both refuse her before step 2 ([OI-65](../requirements/OPEN-ISSUES.md)). The main-flow test for her is at the API only.
+- **Stale peer evaluation form:** `submitPeerEvaluations` sends every evaluation at once and doesn't catch a refusal. The refused teammate's toast shows and the others save, but the Submit button keeps spinning until a reload. Left as a follow-up; the Cypress test tolerates the uncaught rejection.

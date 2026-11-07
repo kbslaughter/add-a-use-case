@@ -13,14 +13,25 @@
     <el-form-item label="Username:" prop="username">
       <el-input v-model="studentBeingEdited.username"></el-input>
     </el-form-item>
-    <el-form-item label="Status:" prop="enabled">
-      <el-switch
-        v-model="studentBeingEdited.enabled"
-        inline-prompt
-        active-text="Enabled"
-        inactive-text="Disabled"
-        style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
-      />
+    <el-form-item label="Status:">
+      <template v-if="studentBeingEdited.enabled !== undefined">
+        <el-tag v-if="studentBeingEdited.enabled" type="success" data-cy="student-status"
+          >Active</el-tag
+        >
+        <el-tag v-else type="danger" data-cy="student-status">Deactivated</el-tag>
+      </template>
+      <el-button
+        v-if="studentBeingEdited.enabled"
+        type="danger"
+        plain
+        size="small"
+        style="margin-left: 12px"
+        :loading="isDeactivating"
+        data-cy="student-deactivate"
+        @click="confirmDeactivation()"
+      >
+        Deactivate
+      </el-button>
     </el-form-item>
     <el-form-item label="First Name:" prop="firstName">
       <el-input v-model="studentBeingEdited.firstName"></el-input>
@@ -42,10 +53,11 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import axios from 'axios'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Student } from '@/apis/student/types'
 import type { FormInstance } from 'element-plus'
-import { findStudentById, updateStudent } from '@/apis/student'
+import { deactivateStudent, findStudentById, updateStudent } from '@/apis/student'
 import { ref, onMounted } from 'vue'
 
 const { studentId } = defineProps(['studentId'])
@@ -56,7 +68,7 @@ const studentBeingEdited = ref<Student>({
   // Data of the user being added or edited
   id: NaN,
   username: '',
-  enabled: false,
+  enabled: undefined, // Unknown until the student loads, so neither a status nor the action shows before then
   firstName: '',
   lastName: '',
   email: ''
@@ -74,7 +86,6 @@ const rules = {
       trigger: 'blur'
     }
   ],
-  enabled: [{ required: true, message: 'Please select the status of the user.', trigger: 'blur' }],
   firstName: [
     { required: true, message: 'Please provide the first name of the user.', trigger: 'blur' }
   ],
@@ -121,6 +132,36 @@ async function updateExistingStudent() {
 
   ElMessage.success('Student updated successfully')
   emit('close-dialog')
+}
+
+const isDeactivating = ref(false)
+
+// UC-STU-deactivate-student: warn about the consequences (step 4), and deactivate only once confirmed (step 5)
+async function confirmDeactivation() {
+  try {
+    await ElMessageBox.confirm(
+      'This student will no longer be able to log in or submit weekly activity reports and peer evaluations. Her account and submitted work are kept, and the account can be reactivated.',
+      'Deactivate this student?',
+      { confirmButtonText: 'Deactivate', cancelButtonText: 'Cancel', type: 'warning' }
+    )
+  } catch {
+    return // Cancelled at the warning (4a): nothing is sent
+  }
+
+  isDeactivating.value = true
+  try {
+    await deactivateStudent(studentId)
+    ElMessage.success('This student has been deactivated.')
+    emit('close-dialog') // Reloads the list, and discards any unsaved edits in this form
+  } catch (error) {
+    // The dialog was stale and she is already deactivated (3a). The shared toast has told the user;
+    // reloading her status removes the action.
+    if (axios.isAxiosError(error) && error.response?.status === 400) {
+      await loadStudent(studentId)
+    }
+  } finally {
+    isDeactivating.value = false
+  }
 }
 </script>
 

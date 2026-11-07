@@ -67,6 +67,13 @@ public class EvaluationService {
             throw new PeerEvaluationIllegalArgumentException("The evaluator and evaluatee must be on the same team.");
         }
 
+        // A deactivated student stays on her team (BR-deactivated-student-team), so being on the team is not enough:
+        // no new evaluation of her may be submitted (BR-evaluation-deactivated-student). Editing an existing one stays
+        // open, which is why this is here and not in the window check updatePeerEvaluation shares.
+        if (!newPeerEvaluation.getEvaluatee().isEnabled()) {
+            throw new PeerEvaluationIllegalArgumentException("This teammate has been deactivated and can no longer be evaluated.");
+        }
+
         // Make sure this is not a duplicate evaluation
         if (this.evaluationRepository.findByWeekAndEvaluatorIdAndEvaluateeId(newPeerEvaluation.getWeek(), newPeerEvaluation.getEvaluator().getId(), newPeerEvaluation.getEvaluatee().getId()).isPresent()) {
             throw new PeerEvaluationIllegalArgumentException("You have already submitted an evaluation for " + newPeerEvaluation.getEvaluatee().getFirstName() + " in this week.");
@@ -170,7 +177,10 @@ public class EvaluationService {
     public PeerEvaluationAverage getPeerEvaluationAverage(String week, Student student) {
         // Get all evaluations for the student in the given week
         List<PeerEvaluation> evaluations = this.evaluationRepository.findByWeekAndEvaluateeId(week, student.getId());
+        return getPeerEvaluationAverage(week, student, evaluations);
+    }
 
+    private PeerEvaluationAverage getPeerEvaluationAverage(String week, Student student, List<PeerEvaluation> evaluations) {
         PeerEvaluationAverage peerEvaluationAverage = new PeerEvaluationAverage();
 
         peerEvaluationAverage.setStudentId(student.getId());
@@ -221,12 +231,18 @@ public class EvaluationService {
         report.setSectionName(this.sectionRepository.findById(sectionId).orElseThrow(() -> new ObjectNotFoundException("section", sectionId)).getSectionName());
 
         // Get all students in the section
-        List<Student> students = this.studentRepository.findBySectionSectionId(sectionId).stream().filter(student -> student.getTeam() != null).collect(Collectors.toList());
+        List<Student> students = this.studentRepository.findBySectionSectionId(sectionId).stream()
+                .filter(student -> student.getTeam() != null)
+                .collect(Collectors.toList());
 
         // For each student, compute her average total score, collect all public comments and private comments, and compute rating averages for each criterion.
         students.forEach(student -> {
-            PeerEvaluationAverage peerEvaluationAverage = getPeerEvaluationAverage(week, student);
-            report.getPeerEvaluationAverages().add(peerEvaluationAverage);
+            List<PeerEvaluation> evaluations = this.evaluationRepository.findByWeekAndEvaluateeId(week, student.getId());
+            // A deactivated student appears only in weeks she received evaluations, her own self-evaluation included,
+            // since each row averages what was received (BR-evaluation-deactivated-student). An active student with none still gets a row.
+            if (student.isEnabled() || !evaluations.isEmpty()) {
+                report.getPeerEvaluationAverages().add(getPeerEvaluationAverage(week, student, evaluations));
+            }
         });
 
         // Who has not submitted is not part of this report: it is BR-submission-owed, which the notification slice
