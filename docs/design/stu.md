@@ -57,16 +57,16 @@ classDiagram
 
 - `student/StudentController.java`, `student/StudentService.java`, `student/StudentSecurityService.java`: as diagrammed. `updateStudent` stops writing `enabled`, which removes its only `SecurityContextHolder` read (part of OI-63).
 - `security/SecurityConfiguration.java`: the new route rule, and `jwtDecoder` keeps Spring's default validators and adds `ActiveAccountJwtValidator`.
-- `security/ActiveAccountJwtValidator.java` (new): reads the `userId` claim and passes only if `existsByIdAndEnabledTrue` is true. A missing claim fails.
+- `security/ActiveAccountJwtValidator.java` (new): reads the `userId` claim and passes only if `existsByIdAndEnabledTrue` is true. A missing claim fails. If the lookup itself throws, the exception propagates as a `500`: the request is still refused, and a database outage doesn't log everyone out.
 - `security/authorizationmanagers/StudentCourseAdminAuthorizationManager.java` (new): the same thin shape as `StudentInstructorAuthorizationManager`.
 - `user/UserRepository.java`, `evaluation/EvaluationService.java`: as diagrammed.
 
 **Frontend** (under `frontend/src/`):
 
 - `apis/student/index.ts`: new `deactivateStudent(id)`.
-- `pages/students/EditStudentForm.vue`: Status becomes read-only. A Deactivate button, shown only for an active student, opens an `ElMessageBox.confirm` whose text gives the "Consequence of the deactivation" from the use case. On success it shows the step 6 message and emits `close-dialog`, which reloads the list and discards unsaved edits in the form.
+- `pages/students/EditStudentForm.vue`: Status becomes read-only. A Deactivate button, shown only for an active student, opens an `ElMessageBox.confirm` with the text "This student will no longer be able to log in or submit weekly activity reports and peer evaluations. Her account and submitted work are kept, and the account can be reactivated." On success it shows the step 6 message and emits `close-dialog`, which reloads the list and discards unsaved edits in the form. On a `400` (a stale dialog, extension 3a) the shared toast shows "This student is already deactivated." and the form reloads the student, so the button disappears (3a1).
 - `pages/students/Students.vue`: status labels become Active and Deactivated.
-- `pages/evaluations/SubmitTeamsEvaluations.vue`: `loadStudents` omits a teammate whose `enabled` is false. Evaluations she already has for the week still load through `getEvaluationsByEvaluatorIdAndWeek`.
+- `pages/evaluations/SubmitTeamsEvaluations.vue`: the starting set of new evaluations omits a teammate whose `enabled` is false. An evaluator who already submitted this week sees her existing evaluations through `getEvaluationsByEvaluatorIdAndWeek`, as today, so a deactivated teammate appears only if that evaluator already evaluated her, and stays editable (BR-evaluation-editable-until-close). A `400` from `POST /evaluations` on a stale form uses the shared toast with the text "This teammate has been deactivated and can no longer be evaluated."
 
 Reused without change: `SubmissionStatusService` already excludes a deactivated student from who owes what, so the "missing peer evaluations" list needs no code. `request.ts` already handles a `401`.
 
@@ -142,7 +142,7 @@ Extension 4a makes no request.
 - **The action lives in the details dialog,** so step 2 happens before step 3. *Rejected:* a button on the table row, which skips step 2.
 - **Extension 3a is a `400` through `IllegalArgumentException`,** like other domain refusals here. *Rejected:* a new `409` exception type, which adds a class and a handler for a rare case the SPA treats the same way.
 - **Peer evaluation rules are enforced on the server as well as in the form** (BR-evaluation-deactivated-student). `addPeerEvaluation` refuses a deactivated evaluatee; `updatePeerEvaluation` stays open under BR-evaluation-editable-until-close. *Rejected:* the form alone, because a direct request could still create one.
-- **"Has received evaluations" decides the report row,** because each row averages evaluations received. The filter applies only to a deactivated student; an active student with none still gets a row. *Rejected:* counting evaluations she wrote, which would produce an empty row.
+- **"Has received evaluations" decides the report row,** because each row averages evaluations received. Her self-evaluation counts as received, since it is in that average. The filter applies only to a deactivated student; an active student with none still gets a row. *Rejected:* counting evaluations she wrote, which would produce an empty row.
 - **No code for edit locks or password reset.** A lock she holds lapses under BR-lock-expiry, and a reset password still can't log in. *Rejected:* releasing locks on deactivation, which couples `student` to RAM to save 15 minutes at most.
 
 ## Data model
@@ -173,10 +173,14 @@ Reuses JWT authentication and the `Result` envelope with `ExceptionHandlerAdvice
 | `PUT` with `enabled` false, as instructor | Unit + integration | `enabled` unchanged; rewrites `StudentServiceTest.testInstructorUpdatesStudent`, which asserts the old behavior |
 | New evaluation of a deactivated teammate | Unit | `400`; nothing saved |
 | Edit an existing evaluation of her, window open | Unit | Succeeds |
-| Form omits a deactivated teammate | Cypress | Teammate not listed |
+| Form, evaluator with no evaluations this week | Cypress | Deactivated teammate not listed |
+| Form, evaluator who already evaluated her this week | Cypress | Deactivated teammate listed and editable |
 | Report, week with no received evaluations | Unit + integration | Not in the report; not listed as missing |
 | Report, week with received evaluations | Unit + integration | Listed |
+| Report, week with only her self-evaluation | Unit | Listed |
 | Her work is retained | Integration | Her evaluations still count in teammates' averages |
+
+**Test setup.** The open-session tests log in over HTTP Basic first to get a real signed token, deactivate the student, then call with that token, because a mocked JWT would bypass the decoder this design changes. Integration fixtures (a course admin not assigned to the course section, a deactivated student, weeks with and without received evaluations) are created inside each test on top of the `DataInitializer` seed, and the base class's `@Transactional` rollback removes them. Cypress stubs the state-changing requests with `cy.intercept`, so a run doesn't permanently deactivate a seed student.
 
 ## Open questions / risks
 
