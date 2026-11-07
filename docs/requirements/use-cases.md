@@ -1476,6 +1476,8 @@ Details:
 - **3a. The student is already deactivated:**
   - 3a1. The system does not offer the action to deactivate this student.
   - 3a2. If the system receives a direct request to deactivate this student, it rejects the request and changes nothing.
+- **3b. The user is not permitted to deactivate this student by BR-student-lifecycle:**
+  - 3b1. The system rejects the request and changes nothing.
 
 **Priority:** Low
 **Frequency of Use:** Rare. Occurs occasionally when a student withdraws from a course section.
