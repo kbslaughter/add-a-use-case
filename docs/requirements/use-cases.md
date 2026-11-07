@@ -1526,6 +1526,7 @@ Details:
 
 **Associated Information:**
 - The course admin or instructor shall be able to cancel the use case at any time prior to submitting it.
+- Only path to re-enable: Once UC-STU-deactivate-student is built, the student edit no longer changes a student's account status, and this use case is the only way to re-enable a student. A mistaken deactivation cannot be undone from the UI until this use case ships.
 
 **Related Use Cases:** UC-STU-delete-student: Delete a student; UC-STU-deactivate-student: Deactivate a student
 **Assumptions:**
