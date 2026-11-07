@@ -177,7 +177,10 @@ public class EvaluationService {
     public PeerEvaluationAverage getPeerEvaluationAverage(String week, Student student) {
         // Get all evaluations for the student in the given week
         List<PeerEvaluation> evaluations = this.evaluationRepository.findByWeekAndEvaluateeId(week, student.getId());
+        return getPeerEvaluationAverage(week, student, evaluations);
+    }
 
+    private PeerEvaluationAverage getPeerEvaluationAverage(String week, Student student, List<PeerEvaluation> evaluations) {
         PeerEvaluationAverage peerEvaluationAverage = new PeerEvaluationAverage();
 
         peerEvaluationAverage.setStudentId(student.getId());
@@ -230,15 +233,16 @@ public class EvaluationService {
         // Get all students in the section
         List<Student> students = this.studentRepository.findBySectionSectionId(sectionId).stream()
                 .filter(student -> student.getTeam() != null)
-                // A deactivated student appears only in weeks she received evaluations, her own self-evaluation included,
-                // since each row averages what was received (BR-evaluation-deactivated-student). An active student with none still gets a row.
-                .filter(student -> student.isEnabled() || !this.evaluationRepository.findByWeekAndEvaluateeId(week, student.getId()).isEmpty())
                 .collect(Collectors.toList());
 
         // For each student, compute her average total score, collect all public comments and private comments, and compute rating averages for each criterion.
         students.forEach(student -> {
-            PeerEvaluationAverage peerEvaluationAverage = getPeerEvaluationAverage(week, student);
-            report.getPeerEvaluationAverages().add(peerEvaluationAverage);
+            List<PeerEvaluation> evaluations = this.evaluationRepository.findByWeekAndEvaluateeId(week, student.getId());
+            // A deactivated student appears only in weeks she received evaluations, her own self-evaluation included,
+            // since each row averages what was received (BR-evaluation-deactivated-student). An active student with none still gets a row.
+            if (student.isEnabled() || !evaluations.isEmpty()) {
+                report.getPeerEvaluationAverages().add(getPeerEvaluationAverage(week, student, evaluations));
+            }
         });
 
         // Who has not submitted is not part of this report: it is BR-submission-owed, which the notification slice
