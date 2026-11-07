@@ -42,6 +42,9 @@ class StudentDeactivationIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     EntityManager entityManager;
 
+    @Autowired
+    StudentService studentService;
+
     @Value("${api.endpoint.base-url}")
     String baseUrl;
 
@@ -164,6 +167,28 @@ class StudentDeactivationIntegrationTest extends AbstractIntegrationTest {
 
         this.mockMvc.perform(get(this.baseUrl + "/students/" + JOHN_ID).accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.studentJohnToken))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("An edit that loaded the student before a deactivation committed does not re-enable the student")
+    void editLoadedBeforeADeactivationDoesNotReEnableTheStudent() {
+        // Given: the edit holds John as active when the deactivation reaches the database. The bulk update bypasses
+        // the persistence context, so the loaded entity goes stale exactly as it would under a concurrent request.
+        Student loaded = this.entityManager.find(Student.class, JOHN_ID);
+        assertThat(loaded.isEnabled()).isTrue();
+        this.entityManager.createQuery("update Student s set s.enabled = false where s.id = :id")
+                .setParameter("id", JOHN_ID).executeUpdate();
+        Student update = new Student(loaded.getUsername(), "Johnny", loaded.getLastName(), loaded.getEmail(), null, true, null);
+
+        // When
+        this.studentService.updateStudent(JOHN_ID, update);
+        this.entityManager.flush();
+        this.entityManager.clear();
+
+        // Then: the edit landed and the deactivation survived
+        Student after = this.entityManager.find(Student.class, JOHN_ID);
+        assertThat(after.getFirstName()).isEqualTo("Johnny");
+        assertThat(after.isEnabled()).isFalse();
     }
 
     private Long evaluationsInvolving(int studentId) {
