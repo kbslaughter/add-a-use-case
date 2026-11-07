@@ -124,7 +124,7 @@ The planned releases, in order: `v1.6.0` the reminders (the on-demand one, and t
 | UC-STU-find-students | The course admin/instructor finds students | ✅ Built | ✅ Verified | ≤ v1.5.0 | — | — | `Students.vue` → `apis/student` `searchStudents` | `StudentController.findStudentsByCriteria → StudentService.findByCriteria` (+ `StudentSpecs`) / `Student` | `StudentServiceTest.testFindByCriteria`; `StudentIntegrationTest.testFindStudentsByCriteria` |
 | UC-STU-view-student | The course admin/instructor views a student | ✅ Built | ✅ Verified | ≤ v1.5.0 | — | — | `Students.vue` / `EditStudentForm.vue` → `apis/student` `findStudentById` | `StudentController.findStudentById → StudentService.findStudentById` / `Student` | `StudentServiceTest.testFindStudentById`; `StudentIntegrationTest.testInstructorBillFindStudentInfoById`, `testStudentJohnFindOwnInfoById` |
 | UC-STU-delete-student | The course admin deletes a student | ✅ Built | ✅ Verified | ≤ v1.5.0 | — | — | `Students.vue` → `apis/student` `deleteStudent` | `StudentController.deleteStudent → StudentService.deleteStudent` / `Student` | `StudentServiceTest.testDeleteStudent`; `StudentIntegrationTest.testAdminDeletesStudent`, `testStudentDeletesAnotherStudent` |
-| UC-STU-deactivate-student | The course admin/instructor deactivates a student | 🟡 In progress | 🔎 None | Later | — | — | — (no dedicated control; via student edit) → `apis/student` `updateStudent` | `StudentController.updateStudent → StudentService.updateStudent` (`enabled` flag; no dedicated deactivate endpoint) / `Student` | — (no targeted deactivate test; only the generic `updateStudent` path) |
+| UC-STU-deactivate-student | The course admin/instructor deactivates a student | 📐 Designed | — | Later | FR-SEC-active-account | `design/stu.md` | — (no dedicated control; via student edit) → `apis/student` `updateStudent` | `StudentController.updateStudent → StudentService.updateStudent` (`enabled` flag; no dedicated deactivate endpoint) / `Student` | — (no targeted deactivate test; only the generic `updateStudent` path) |
 | UC-STU-reactivate-student | The course admin/instructor reactivates a student | 🟡 In progress | 🔎 None | Later | — | — | — (no dedicated control; via student edit) → `apis/student` `updateStudent` | `StudentController.updateStudent → StudentService.updateStudent` (`enabled` flag; no dedicated reactivate endpoint) / `Student` | — (no targeted reactivate test; only the generic `updateStudent` path) |
 | UC-INS-invite-instructors | The course admin invites instructors to register an account | ✅ Built | 🔎 None | ≤ v1.5.0 | — | — | `InviteUsersForm.vue` → `apis/section` `inviteOrAddInstructors` | `SectionController.inviteOrAddInstructors → UserInvitationService.sendEmailInvitations` / `UserInvitation` | — (no test exercises the `invite-or-add` path) |
 | UC-INS-assign-instructors | The course admin assigns instructors to teams | ✅ Built | ✅ Verified | ≤ v1.5.0 | — | — | `Sections.vue` → `apis/team` `assignInstructorToTeam` | `TeamController.assignInstructorToTeam → TeamService.assignInstructorToTeam` (+ `InstructorRepository`) / `Team` | `TeamServiceTest.testAssignInstructorToTeam`; `TeamIntegrationTest.assignInstructorToTeam`, `assignInstructorToTeamNotSameSection` |
@@ -331,7 +331,7 @@ A business rule (`BR-*`, owned by [business-rules.md](requirements/business-rule
 
 > ⚙️ **Generated, do not hand-edit.** This table is a *projection* of the forward citations — the use cases' **Business Rules** fields, the SRS's rule citations, and the NFR matrix's `QS-<slug>` rows — not a second authored copy of them (that would violate "cited, never restated" and drift). `/spec-build` **regenerates and verifies** it against the live citations; a row that disagrees with them is a flagged defect, and edits belong in the citing artifacts, not here. The two universal access rules (`BR-role-based-access`, `BR-team-scoped-access`) are cited by essentially every authoring/CRUD use case and are summarized by count rather than enumerated (the same noise-reduction convention as the functional matrix's omitted `FR-SEC-*` column). This index is the **spec-level** backward view (which requirements *cite* a rule); its **code-level** companion — which `file:method` *enforces* each rule — lives in `/sync-check`'s `BR → enforcement-point` map. Together they trace a rule → requirements → code.
 >
-> **Last regenerated:** 2026-10-03 (against the citations as of this commit).
+> **Last regenerated:** 2026-11-06 (against the citations as of this commit).
 
 | Business rule | Cited by use cases | SRS | QS |
 |---|---|---|---|
@@ -343,9 +343,11 @@ A business rule (`BR-*`, owned by [business-rules.md](requirements/business-rule
 | `BR-authored-prevails` | `UC-AI-elicit-requirements` | — | — |
 | `BR-collab-no-overwrite` | `UC-COL-collaborative-edit` | `ROB-no-overwrite` | — |
 | `BR-comment-access` | `UC-COL-add-comment`, `UC-COL-resolve-comment` | — | — |
+| `BR-deactivated-student-team` | `UC-STU-deactivate-student` | — | — |
 | `BR-deletion-integrity` | `UC-ART-delete-artifact`, `UC-GLO-delete-term` | `DI-artifact-key-assignment`, `DI-referential-integrity`, `DI-soft-delete-retention`, (prose) | — |
 | `BR-document-creation` | `UC-TPL-provision-documents` | — | — |
 | `BR-edit-lock-required` | `UC-COL-collaborative-edit`, `UC-DOC-edit-document`, `UC-DOC-edit-use-case` | `DI-concurrency-control`, (prose) | — |
+| `BR-evaluation-deactivated-student` | `UC-EVA-section-evaluation-report`, `UC-EVA-submit-evaluation`, `UC-STU-deactivate-student` | — | — |
 | `BR-evaluation-editable-until-close` | `UC-EVA-submit-evaluation` | — | — |
 | `BR-evaluation-private-comment` | `UC-EVA-section-evaluation-report`, `UC-EVA-student-evaluation-report`, `UC-EVA-submit-evaluation`, `UC-EVA-view-own-evaluation` | `FR-SEC-authorization` | — |
 | `BR-evaluation-submission-window` | `UC-EVA-submit-evaluation`, `UC-NOT-remind-non-submitters` | — | — |
