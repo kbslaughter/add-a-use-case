@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -444,6 +445,46 @@ class EvaluationServiceTest {
     }
 
     @Test
+    void testAddPeerEvaluationOfADeactivatedTeammateIsRejected() {
+        // Given
+        LocalDate fixedDate = LocalDate.of(2023, 8, 13); // August 13, 2023 is the Sunday of the week 2023-W32, so the previous week is 2023-W31
+        Clock fixedClock = Clock.fixed(fixedDate.atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
+        given(this.clock.instant()).willReturn(fixedClock.instant());
+        given(this.clock.getZone()).willReturn(fixedClock.getZone());
+
+        this.woody.setEnabled(false);
+        PeerEvaluation newPeerEvaluation = new PeerEvaluation("2023-W31", amanda, woody, List.of(), "public comment", "private comment");
+
+        // When and then
+        assertThatThrownBy(() -> this.evaluationService.addPeerEvaluation(newPeerEvaluation))
+                .isInstanceOf(PeerEvaluationIllegalArgumentException.class)
+                .hasMessage("This teammate has been deactivated and can no longer be evaluated.");
+        verify(this.evaluationRepository, never()).save(any(PeerEvaluation.class));
+    }
+
+    @Test
+    void testUpdateAnExistingPeerEvaluationOfADeactivatedTeammateSucceeds() {
+        // Given: the window is open (BR-evaluation-editable-until-close)
+        LocalDate fixedDate = LocalDate.of(2023, 8, 8); // Falls in 2023-W32, so 2023-W31 is the previous week
+        Clock fixedClock = Clock.fixed(fixedDate.atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
+        given(this.clock.instant()).willReturn(fixedClock.instant());
+        given(this.clock.getZone()).willReturn(fixedClock.getZone());
+
+        this.eric.setEnabled(false);
+        PeerEvaluation oldPeerEvaluation = new PeerEvaluation("2023-W31", this.john, this.eric, List.of(), "public comment", "private comment");
+        PeerEvaluation update = new PeerEvaluation("2023-W31", this.john, this.eric, List.of(), "new public comment", "new private comment");
+
+        given(this.evaluationRepository.findById(1)).willReturn(Optional.of(oldPeerEvaluation));
+        given(this.evaluationRepository.save(oldPeerEvaluation)).willReturn(oldPeerEvaluation);
+
+        // When
+        PeerEvaluation updatedPeerEvaluation = this.evaluationService.updatePeerEvaluation(1, update);
+
+        // Then
+        assertThat(updatedPeerEvaluation.getPublicComment()).isEqualTo("new public comment");
+    }
+
+    @Test
     void testUpdatePeerEvaluationAfterTheSubmissionWindowClosed() {
         // Given
         // Sep 15, 2023 falls in 2023-W37, so the only week still open is 2023-W36 and this evaluation's has closed
@@ -590,6 +631,53 @@ class EvaluationServiceTest {
         assertThat(report.getPeerEvaluationAverages().get(1).getAverageTotalScore()).isCloseTo(50.0, within(0.01));
         assertThat(report.getPeerEvaluationAverages().get(2).getAverageTotalScore()).isCloseTo(51.0, within(0.01));
         assertThat(report.getPeerEvaluationAverages().get(3).getAverageTotalScore()).isCloseTo(52.0, within(0.01));
+    }
+
+    @Test
+    void testReportOmitsADeactivatedStudentWithNoReceivedEvaluationsThatWeek() {
+        // Given
+        given(this.sectionRepository.findById(2)).willReturn(Optional.of(new Section("2023-2024", LocalDate.of(2023, 8, 14), LocalDate.of(2024, 4, 29), true, DayOfWeek.MONDAY, LocalTime.of(23, 59), DayOfWeek.TUESDAY, LocalTime.of(23, 59))));
+        given(this.studentRepository.findBySectionSectionId(2)).willReturn(List.of(this.eric, this.woody));
+        this.eric.setEnabled(false);
+        given(this.evaluationRepository.findByWeekAndEvaluateeId("2023-W39", this.eric.getId())).willReturn(List.of());
+        given(this.evaluationRepository.findByWeekAndEvaluateeId("2023-W39", this.woody.getId())).willReturn(List.of());
+
+        // When
+        WeeklyPeerEvaluationReport report = this.evaluationService.generateWeeklyPeerEvaluationReportForSection(2, "2023-W39");
+
+        // Then: Eric is gone, and Woody, active with none, keeps his row
+        assertThat(report.getPeerEvaluationAverages()).extracting(PeerEvaluationAverage::getStudentId).containsExactly(this.woody.getId());
+    }
+
+    @Test
+    void testReportListsADeactivatedStudentWithReceivedEvaluationsThatWeek() {
+        // Given
+        given(this.sectionRepository.findById(2)).willReturn(Optional.of(new Section("2023-2024", LocalDate.of(2023, 8, 14), LocalDate.of(2024, 4, 29), true, DayOfWeek.MONDAY, LocalTime.of(23, 59), DayOfWeek.TUESDAY, LocalTime.of(23, 59))));
+        given(this.studentRepository.findBySectionSectionId(2)).willReturn(List.of(this.eric));
+        this.eric.setEnabled(false);
+        given(this.evaluationRepository.findByWeekAndEvaluateeId("2023-W31", this.eric.getId())).willReturn(this.ericsW31Evaluations);
+
+        // When
+        WeeklyPeerEvaluationReport report = this.evaluationService.generateWeeklyPeerEvaluationReportForSection(2, "2023-W31");
+
+        // Then
+        assertThat(report.getPeerEvaluationAverages()).extracting(PeerEvaluationAverage::getStudentId).containsExactly(this.eric.getId());
+    }
+
+    @Test
+    void testReportListsADeactivatedStudentWhoseOnlyReceivedEvaluationIsHerSelfEvaluation() {
+        // Given
+        given(this.sectionRepository.findById(2)).willReturn(Optional.of(new Section("2023-2024", LocalDate.of(2023, 8, 14), LocalDate.of(2024, 4, 29), true, DayOfWeek.MONDAY, LocalTime.of(23, 59), DayOfWeek.TUESDAY, LocalTime.of(23, 59))));
+        given(this.studentRepository.findBySectionSectionId(2)).willReturn(List.of(this.eric));
+        this.eric.setEnabled(false);
+        PeerEvaluation selfEvaluation = new PeerEvaluation("2023-W39", this.eric, this.eric, List.of(), "public comment", "private comment");
+        given(this.evaluationRepository.findByWeekAndEvaluateeId("2023-W39", this.eric.getId())).willReturn(List.of(selfEvaluation));
+
+        // When
+        WeeklyPeerEvaluationReport report = this.evaluationService.generateWeeklyPeerEvaluationReportForSection(2, "2023-W39");
+
+        // Then
+        assertThat(report.getPeerEvaluationAverages()).extracting(PeerEvaluationAverage::getStudentId).containsExactly(this.eric.getId());
     }
 
     @Test

@@ -6,6 +6,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import team.projectpulse.AbstractIntegrationTest;
 import team.projectpulse.evaluation.dto.PeerEvaluationDto;
 import team.projectpulse.evaluation.dto.RatingDto;
+import team.projectpulse.student.Student;
 import team.projectpulse.system.StatusCode;
 import org.hamcrest.Matchers;
 import org.json.JSONObject;
@@ -407,6 +408,32 @@ public class EvaluationIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.peerEvaluationAverages[0].lastName").value("Smith"))
                 .andExpect(jsonPath("$.data.peerEvaluationAverages[0].averageTotalScore").value(Matchers.closeTo(51.33, 0.01)))
                 .andExpect(jsonPath("$.data.studentsMissingPeerEvaluations").doesNotExist()); // Now GET /sections/{sectionId}/submission-status
+    }
+
+    @Test
+    void testSectionReportOmitsADeactivatedStudentWithNoReceivedEvaluationsThatWeek() throws Exception {
+        // Given: the seed data has no evaluations of anyone in 2023-W36, an active week
+        this.entityManager.createQuery("select s from Student s where s.email = 'j.moon@abc.edu'", Student.class).getSingleResult().setEnabled(false);
+        this.entityManager.flush();
+
+        // When and then: one row fewer than the 11 the course section's team members otherwise get
+        this.mockMvc.perform(get(this.baseUrl + "/evaluations/sections/2/week/2023-W36").accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.adminBingyangToken))
+                .andExpect(jsonPath("$.flag").value(true))
+                .andExpect(jsonPath("$.data.peerEvaluationAverages", Matchers.hasSize(10)))
+                .andExpect(jsonPath("$.data.peerEvaluationAverages[?(@.email == 'j.moon@abc.edu')]").isEmpty());
+    }
+
+    @Test
+    void testSectionReportListsADeactivatedStudentWithReceivedEvaluationsThatWeek() throws Exception {
+        // Given: Jerry's team (Team1) evaluated him in 2023-W31
+        this.entityManager.createQuery("select s from Student s where s.email = 'j.moon@abc.edu'", Student.class).getSingleResult().setEnabled(false);
+        this.entityManager.flush();
+
+        // When and then
+        this.mockMvc.perform(get(this.baseUrl + "/evaluations/sections/2/week/2023-W31").accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.adminBingyangToken))
+                .andExpect(jsonPath("$.flag").value(true))
+                .andExpect(jsonPath("$.data.peerEvaluationAverages", Matchers.hasSize(11)))
+                .andExpect(jsonPath("$.data.peerEvaluationAverages[?(@.email == 'j.moon@abc.edu')]").isNotEmpty());
     }
 
     @Test

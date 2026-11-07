@@ -14,7 +14,7 @@ public class StudentDtoToStudentConverter implements Converter<StudentDto, Stude
         Student student = new Student();
         student.setId(studentDto.id());
         student.setUsername(studentDto.username());
-        student.setEnabled(studentDto.enabled()); // Only instructor can enable/disable student
+        student.setEnabled(studentDto.enabled()); // Carried for the DTO's sake; StudentService.updateStudent ignores it
         student.setFirstName(studentDto.firstName());
         student.setLastName(studentDto.lastName());
         student.setEmail(studentDto.email());
